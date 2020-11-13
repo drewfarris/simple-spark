@@ -22,6 +22,16 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.PriorityQueue;
 
+/** Read the data file containing the top most-populous cities in the United States and
+ *  produce the top 5 cities, in sorted order, for each state.
+ *
+ *  A few takeaways:
+ *  - Use a partitioner to control grouping of objects so that the all get sent to the same partition.
+ *  - Use a priority queue in a reducer (TopNFunction), to keep only the highest scoring objects.
+ *  - When creating a new collection from a priority queue, via constructor (which calls Collections.addAll(),
+ *    it is necessary to sort the results.
+ *
+ */
 public class SecondarySort {
 
     static final Logger log = LoggerFactory.getLogger(SecondarySort.class);
@@ -86,6 +96,7 @@ public class SecondarySort {
         finalResults.saveAsTextFile(outputPath);
     }
 
+    /** Extract results from the priority queue and produce tuples of LocationKey for the final results */
     public static class CleanupResult implements FlatMapFunction<Tuple2<String, PriorityQueue<LocationKey>>, LocationKey> {
 
         public Comparator<LocationKey> comparator;
@@ -125,6 +136,8 @@ public class SecondarySort {
         }
     }
 
+    /** In preparation for the reduceByKey, we need to generate an input pair rdd with the priority queue objects
+     *  in place */
     public static class ExtractStateAndCountToQueue implements PairFunction<Tuple2<LocationKey, Void>, String, PriorityQueue<LocationKey>> {
         final Comparator<LocationKey> comparator;
 
@@ -141,7 +154,7 @@ public class SecondarySort {
     }
 
     /** For sorting a priority queue, we want the smallest values first, so they will get
-     *  popped off the list first when manually trimming to max size */
+     *  popped off the list first when manually trimming the priority queue to max size */
     public static class CountComparator implements Serializable, Comparator<LocationKey> {
         @Override
         public int compare(LocationKey o1, LocationKey o2) {
@@ -169,6 +182,7 @@ public class SecondarySort {
         final String locality;
         final Long count;
 
+        /** convienience method to parse a LocationKey from an array */
         public static Iterator<Tuple2<LocationKey,Void>> flatMap(String[] arr) {
             List<Tuple2<LocationKey,Void>> result = new ArrayList<>();
             if (arr.length >= 3) {
