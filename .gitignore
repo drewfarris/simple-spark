@@ -1,4 +1,5 @@
 target
+output
 .idea
 dependency-reduced-pom.xml
 *.iml

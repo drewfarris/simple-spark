@@ -36,7 +36,7 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>drew.spark.SparkJob</mainClass>
+                                    <mainClass>drew.spark.SimpleJob</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>

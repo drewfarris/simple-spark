@@ -19,7 +19,7 @@ import scala.Tuple2;
 import java.util.Collections;
 import java.util.Iterator;
 
-public class SparkJob {
+public class SimpleJob {
     @Parameter(names = "-n", description = "Spark Job Name")
     String appName = "Generic SparkJob";
 
@@ -32,7 +32,7 @@ public class SparkJob {
     final SparkSession spark;
     final JavaSparkContext sparkContext;
 
-    public SparkJob(String[] args) {
+    public SimpleJob(String[] args) {
         JCommander.newBuilder()
                 .addObject(this)
                 .build()
@@ -133,7 +133,7 @@ public class SparkJob {
     }
 
     public static void main(String[] args) {
-        SparkJob job = new SparkJob(args);
+        SimpleJob job = new SimpleJob(args);
         job.execute();
     }
 
