@@ -1,4 +1,4 @@
-package drew.spark;
+package drew.spark.util;
 
 import org.apache.spark.sql.SparkSession;
 

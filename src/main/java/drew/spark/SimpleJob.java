@@ -19,7 +19,7 @@ import scala.Tuple2;
 import java.util.Collections;
 import java.util.Iterator;
 
-public class SimpleJob {
+public class SimpleJob implements Driver.Executable {
     @Parameter(names = "-n", description = "Spark Job Name")
     String appName = "Generic SparkJob";
 

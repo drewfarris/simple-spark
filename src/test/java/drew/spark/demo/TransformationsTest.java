@@ -1,5 +1,6 @@
-package drew.spark;
+package drew.spark.demo;
 
+import drew.spark.util.SparkSessionTestWrapper;
 import org.junit.Test;
 import static org.junit.Assert.*;
 

@@ -1,7 +1,9 @@
-package drew.spark;
+package drew.spark.sort;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
+import drew.spark.Driver;
+import drew.spark.data.StateLocalityPopulation;
 import org.apache.spark.Partitioner;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -16,7 +18,6 @@ import scala.Serializable;
 import scala.Tuple2;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
@@ -32,9 +33,7 @@ import java.util.PriorityQueue;
  *    it is necessary to sort the results.
  *
  */
-public class SecondarySort {
-
-    static final Logger log = LoggerFactory.getLogger(SecondarySort.class);
+public class SecondarySort implements Driver.Executable {
 
     @Parameter(names = "-i", description = "Input File")
     String inputPath = "data/state-city-pop.csv";
@@ -78,13 +77,13 @@ public class SecondarySort {
 
         JavaRDD<String[]> rawDataArray = input.map(line -> line.split(","));
         // a pair is necessary for the `partitionBy` call below.
-        JavaPairRDD<LocationKey,Void> locationData = rawDataArray.flatMapToPair(LocationKey::flatMap);
+        JavaPairRDD<StateLocalityPopulation,Void> locationData = rawDataArray.flatMapToPair(StateLocalityPopulation::flatMap);
 
         int sortPartitions = Math.min(locationData.getNumPartitions(), partitions);
-        JavaPairRDD<LocationKey,Void> sortedLocationData = locationData.partitionBy(new StatePartitioner(sortPartitions));
+        JavaPairRDD<StateLocalityPopulation,Void> sortedLocationData = locationData.partitionBy(new StatePartitioner(sortPartitions));
 
         final CountComparator countComparator = new CountComparator();
-        JavaPairRDD<String, PriorityQueue<LocationKey>> stateByLocation = sortedLocationData
+        JavaPairRDD<String, PriorityQueue<StateLocalityPopulation>> stateByLocation = sortedLocationData
                 .mapToPair(
                         new ExtractStateAndCountToQueue(countComparator)
                 )
@@ -92,22 +91,22 @@ public class SecondarySort {
                         new TopNFunction<>(topCount, countComparator)
                 );
 
-        JavaRDD<LocationKey> finalResults = stateByLocation.flatMap(new CleanupResult(countComparator.reversed()));
+        JavaRDD<StateLocalityPopulation> finalResults = stateByLocation.flatMap(new CleanupResult(countComparator.reversed()));
         finalResults.saveAsTextFile(outputPath);
     }
 
     /** Extract results from the priority queue and produce tuples of LocationKey for the final results */
-    public static class CleanupResult implements FlatMapFunction<Tuple2<String, PriorityQueue<LocationKey>>, LocationKey> {
+    public static class CleanupResult implements FlatMapFunction<Tuple2<String, PriorityQueue<StateLocalityPopulation>>, StateLocalityPopulation> {
 
-        public Comparator<LocationKey> comparator;
+        public Comparator<StateLocalityPopulation> comparator;
 
-        public CleanupResult(Comparator<LocationKey> comparator) {
+        public CleanupResult(Comparator<StateLocalityPopulation> comparator) {
             this.comparator = comparator;
         }
 
         @Override
-        public Iterator<LocationKey> call(Tuple2<String, PriorityQueue<LocationKey>> t) {
-            final List<LocationKey> k = new ArrayList<>(t._2());
+        public Iterator<StateLocalityPopulation> call(Tuple2<String, PriorityQueue<StateLocalityPopulation>> t) {
+            final List<StateLocalityPopulation> k = new ArrayList<>(t._2());
             k.sort(comparator);
             return k.iterator();
         }
@@ -138,27 +137,27 @@ public class SecondarySort {
 
     /** In preparation for the reduceByKey, we need to generate an input pair rdd with the priority queue objects
      *  in place */
-    public static class ExtractStateAndCountToQueue implements PairFunction<Tuple2<LocationKey, Void>, String, PriorityQueue<LocationKey>> {
-        final Comparator<LocationKey> comparator;
+    public static class ExtractStateAndCountToQueue implements PairFunction<Tuple2<StateLocalityPopulation, Void>, String, PriorityQueue<StateLocalityPopulation>> {
+        final Comparator<StateLocalityPopulation> comparator;
 
-        public ExtractStateAndCountToQueue(Comparator<LocationKey> comparator) {
+        public ExtractStateAndCountToQueue(Comparator<StateLocalityPopulation> comparator) {
             this.comparator = comparator;
         }
 
         @Override
-        public Tuple2<String, PriorityQueue<LocationKey>> call(Tuple2<LocationKey, Void> t) {
-            final PriorityQueue<LocationKey> singletonQueue = new PriorityQueue<>(1, comparator);
+        public Tuple2<String, PriorityQueue<StateLocalityPopulation>> call(Tuple2<StateLocalityPopulation, Void> t) {
+            final PriorityQueue<StateLocalityPopulation> singletonQueue = new PriorityQueue<>(1, comparator);
             singletonQueue.add(t._1);
-            return new Tuple2<>(t._1.state,singletonQueue);
+            return new Tuple2<>(t._1.getState(),singletonQueue);
         }
     }
 
     /** For sorting a priority queue, we want the smallest values first, so they will get
      *  popped off the list first when manually trimming the priority queue to max size */
-    public static class CountComparator implements Serializable, Comparator<LocationKey> {
+    public static class CountComparator implements Serializable, Comparator<StateLocalityPopulation> {
         @Override
-        public int compare(LocationKey o1, LocationKey o2) {
-            return Long.compare(o1.count, o2.count);
+        public int compare(StateLocalityPopulation o1, StateLocalityPopulation o2) {
+            return Long.compare(o1.getPopulation(), o2.getPopulation());
         }
     }
 
@@ -171,55 +170,8 @@ public class SecondarySort {
             return numPartitions;
         }
         public int getPartition(Object key) {
-            LocationKey locationKey = (LocationKey) key;
-            return locationKey.state.hashCode() % numPartitions;
-        }
-    }
-
-    public static class LocationKey implements Serializable {
-
-        final String state;
-        final String locality;
-        final Long count;
-
-        /** convienience method to parse a LocationKey from an array */
-        public static Iterator<Tuple2<LocationKey,Void>> flatMap(String[] arr) {
-            List<Tuple2<LocationKey,Void>> result = new ArrayList<>();
-            if (arr.length >= 3) {
-                result.add(new Tuple2<>(new LocationKey(arr),null));
-            }
-            return result.iterator();
-        }
-
-        public LocationKey(String[] arr) {
-            if (arr.length > 0) {
-                state = arr[0];
-            }
-            else {
-                state = "N/A";
-            }
-
-            if (arr.length > 1) {
-                locality = arr[1];
-            }
-            else {
-                locality = "N/A";
-            }
-
-            long tmpCount = 0L;
-            if (arr.length > 2) {
-                try {
-                    tmpCount = Long.parseLong(arr[2]);
-                }
-                catch (NumberFormatException nfe) {
-                    log.warn("Number Format Exception for input: " + Arrays.toString(arr));
-                }
-            }
-            count = tmpCount;
-        }
-
-        public String toString() {
-            return String.join(", ", state, locality, String.valueOf(count));
+            StateLocalityPopulation locationKey = (StateLocalityPopulation) key;
+            return locationKey.getState().hashCode() % numPartitions;
         }
     }
 

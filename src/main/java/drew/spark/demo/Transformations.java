@@ -1,4 +1,4 @@
-package drew.spark;
+package drew.spark.demo;
 
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
