@@ -3,3 +3,4 @@ output
 .idea
 dependency-reduced-pom.xml
 *.iml
+data
